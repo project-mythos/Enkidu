@@ -1,4 +1,4 @@
-package magellan
+package enkidu
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import io.netty.channel
@@ -16,7 +16,7 @@ import scala.util.control.{NonFatal, NoStackTrace}
 
 class ChannelClosedException(addr: SocketAddress) extends Throwable
 
-trait Transport[In, Out] {
+trait Flow[In, Out] {
 
   def read(): Future[Out]
   def write(in: In): Future[Unit]
@@ -29,22 +29,22 @@ trait Transport[In, Out] {
 
 
 
-object Transport {
+object Flow {
 
 
-  def cast[In1, Out1](trans: Transport[Any, Any]) = {
-    trans.asInstanceOf[Transport[In1, Out1]]
+  def cast[In1, Out1](trans: Flow[Any, Any]) = {
+    trans.asInstanceOf[Flow[In1, Out1]]
   }
  
 }
 
 
 
-class ChannelTransport(
+class ChannelFlow(
   chan: channel.Channel,
   readQueue: AsyncQueue[Any] = new AsyncQueue[Any],
   omitStackTraceOnInactive: Boolean = false
-) extends Transport[Any, Any] {
+) extends Flow[Any, Any] {
 
   val msgsNeeded = new AtomicInteger(0)
   val alreadyClosed = new AtomicBoolean(false)
@@ -74,7 +74,7 @@ class ChannelTransport(
     val p = Promise[Unit]() 
     if (chan.isOpen) {
       Future { chan.close() }
-    } else {Future {()} } 
+    } else Future.Done 
   }
 
 
@@ -161,3 +161,25 @@ class ChannelTransport(
 }
 
 
+class QueueFlow[In, Out](writeq: AsyncQueue[In], readq: AsyncQueue[Out])
+    extends Flow[In, Out] {
+
+
+  def write(input: In): Future[Unit] = {
+    writeq.offer(input)
+    Future.Done
+  }
+
+  def read(): Future[Out] =
+    readq.poll()
+
+
+  def close(): Future[Unit] = {
+    Future.Done
+  }
+
+
+  def localAddress: SocketAddress = new SocketAddress {}
+  def remoteAddress: SocketAddress = new SocketAddress {}
+
+}

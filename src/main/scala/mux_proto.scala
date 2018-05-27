@@ -1,4 +1,4 @@
-package magellen.mux_proto
+package enkidu.mux_proto
 
 import java.nio.charset.StandardCharsets.UTF_8
 import io.netty.handler.codec.{
@@ -92,6 +92,7 @@ object Headers extends StringField[Fields.Headers] {
 
 
 
+  def empty = List[(String, String)]()
 
 }
 

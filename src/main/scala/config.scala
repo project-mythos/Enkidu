@@ -1,4 +1,4 @@
-package magellan
+package enkidu
 
 import io.netty.channel.EventLoopGroup
 import io.netty.channel.nio.NioEventLoopGroup
@@ -21,7 +21,7 @@ case class WorkerPool(group: EventLoopGroup) {
 object WorkerPool {
 
 
-  def make(): WorkerPool = {
+  def default(): WorkerPool = {
 
     new WorkerPool(
       Executors.newCachedThreadPool(

@@ -1,4 +1,5 @@
-package magellan
+package enkidu
+
 import io.netty.channel
 import com.twitter.util.{Future, Promise}
 import java.net.SocketAddress
@@ -11,17 +12,17 @@ object Connection {
   def fromBootstrap[Req, Rep](
     addr: SocketAddress,
     b: Bootstrap,
-    makeTransport: Channel => Transport[Any, Any]
-  ): Future[ Transport[Req, Rep] ]= {
+    makeFlow: Channel => Flow[Any, Any]
+  ): Future[ Flow[Req, Rep] ]= {
 
-    val p = Promise[Transport[Req, Rep] ]()
+    val p = Promise[Flow[Req, Rep] ]()
 
     b.connect(addr).addListener( new ChannelFutureListener {
 
       def operationComplete(f: channel.ChannelFuture) = {
         if (f.isSuccess) {
 
-          val t = (makeTransport andThen Transport.cast[Req, Rep])(f.channel())
+          val t = (makeFlow andThen Flow.cast[Req, Rep])(f.channel())
           p.setValue(t)
 
         } else {
@@ -42,12 +43,12 @@ object Connection {
     c: java.lang.Class[_ <: Channel], 
     addr: SocketAddress,
     initializer: channel.ChannelInitializer[Channel],
-    workers: WorkerPool = WorkerPool.make(),
-    makeTransport: Channel => Transport[Any, Any]
+    workers: WorkerPool, 
+    makeFlow: Channel => Flow[Any, Any]
 
-  ): Future[Transport[Req, Rep]] = {
+  ): Future[Flow[Req, Rep]] = {
 
-    val p = new Promise[Transport[Any, Any] ]
+    val p = new Promise[Flow[Any, Any] ]
     val b = new Bootstrap()
 
     b
@@ -55,9 +56,8 @@ object Connection {
       .channel(c)
       .handler(initializer)
 
-    fromBootstrap[Req, Rep](addr, b, makeTransport)
+    fromBootstrap[Req, Rep](addr, b, makeFlow)
   }
-
 
 
 
