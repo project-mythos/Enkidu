@@ -1,11 +1,12 @@
-package enkidu
+package Enkidu
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import io.netty.channel
 
-import com.twitter.util.{Future, Promise, Return, Time}
+import com.twitter.util.{Future, Promise, Return, Time, Try}
 import com.twitter.concurrent.AsyncQueue
 import channel.{ChannelException, EventLoopGroup}
+
 import java.net.SocketAddress
 import scala.util.control.{NonFatal, NoStackTrace}
 
@@ -161,9 +162,10 @@ class ChannelFlow(
 }
 
 
-class QueueFlow[In, Out](writeq: AsyncQueue[In], readq: AsyncQueue[Out])
+class QueueFlow[In, Out](writeq: AsyncQueue[In] = new AsyncQueue[In], readq: AsyncQueue[Out] = new AsyncQueue[Out])
     extends Flow[In, Out] {
 
+  val closed = Promise[Boolean]() 
 
   def write(input: In): Future[Unit] = {
     writeq.offer(input)
@@ -175,6 +177,7 @@ class QueueFlow[In, Out](writeq: AsyncQueue[In], readq: AsyncQueue[Out])
 
 
   def close(): Future[Unit] = {
+    closed.updateIfEmpty(Try{true} )
     Future.Done
   }
 

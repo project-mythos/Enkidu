@@ -1,8 +1,8 @@
-package enkidu
+package Enkidu
 
 import org.scalatest.FunSuite
 import io.netty.channel.embedded.EmbeddedChannel
-import enkidu.mux_proto._
+import Enkidu.Mux._
 import com.twitter.concurrent.{AsyncQueue}
 
 import com.twitter.util.{Await}
@@ -71,6 +71,18 @@ class TransportSuite extends FunSuite {
 
     val (e, gotm) = (new String(msg.payload, "UTF-8") , new String(got.payload, "UTF-8") )
     assert(e == gotm)
+  }
+
+
+  test ("Test RMSG") {
+    val rchan = new EmbeddedChannel( new TMSGEncoder(), new TMSGDecoder() )
+    val flow = Flow.cast[RMSG, RMSG](new ChannelFlow(rchan) )
+    val msg = RMSG(Headers.empty, "nigga fag cunt".getBytes("UTF-8") )
+
+    rchan.writeInbound(msg)
+
+    val got  = Await.result( flow.read )
+    assert(msg == got)
   }
 
 
