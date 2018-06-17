@@ -10,113 +10,67 @@ import io.netty.handler.codec.{
 import scala.util.matching.Regex
 import io.netty.buffer.{Unpooled, ByteBuf, ByteBufUtil}
 
-object Fields {
-  type Path = List[String]
-  type Headers = List[(String, String)]
+
+
+trait MSG[T] {
+
+  def headers(t: T): Fields.Headers
+  def body(t: T): Array[Byte]
+
+  def withHeaders(t: T, hdrs: Fields.Headers): T
+  def withBody(t: T, body: Array[Byte]): T
 }
 
-
-trait StringField[T] {
-  def toString(t: T): String
-  def ofString(t: String): T
-
-  //this can be a good thing to change when trying to shave off some latency
-  def toByteBuf(p: T) = {
-    val s = toString(p)
-
-    val bytes = s.getBytes("UTF-8")
-    (bytes.length, Unpooled.wrappedBuffer(bytes) )
-  }
-
-
-
-  def ofByteBuf(buf: ByteBuf) = {
-    val s =  buf.toString(UTF_8)
-    ofString(s)
-  }
-
-}
-
-
-
-object Path extends StringField[Fields.Path]  {
-
-  def toString(p: Fields.Path): String = p.mkString("/")
-  def ofString(s: String): Fields.Path = s.split("/").toList
-}
-
-
-
-
-object Headers extends StringField[Fields.Headers] {
-
-  val between_delim = "\\{.*?\\}".r
-  val pairs = "\\[.*?\\]".r
-
-
-  def headerToString(hdr: (String, String)) = {
-    val (key, value) = hdr
-    s"${key}:${value}"
-  }
-
-  def toString(t: List[(String, String)]) = {
-    val t1 = t.map {x => headerToString(x) }
-    "{" + t1.mkString(", ") + "}"
-  }
-
-
-  def ofString(s: String): Fields.Headers = {
-    val h1 = between_delim.findFirstIn(s)
-    val hdrs = h1.map {x => pairs.findAllIn(x).toList }
-
-
-
-    val getHdr = {l: List[String] =>
-
-      l.map { x =>
-        val toks = x.split(":")
-        (toks(0), toks(1) )
-      }
-
-    }
-
-    val o = hdrs.map { x => getHdr(x)}
-
-    o match {
-      case Some(x) => x
-      case _ => List()
-    }
-
-  }
-
-
-
-  def empty = List[(String, String)]()
-
-}
 
 case class TMSG(
   path: Fields.Path,
   headers: Fields.Headers,
   payload: Array[Byte]
-)
+) 
 
-object TMSG {
+object TMSG extends MSG[TMSG] {
 
   def apply(path: Fields.Path, payload: Array[Byte]): TMSG = {
     TMSG(path, Headers.empty, payload)
   }
+
+  def apply(path: Fields.Path): TMSG = {
+    TMSG(path, Headers.empty, Array[Byte]() )
+  }
+
+  def body(t: TMSG) = t.payload
+  def headers(t: TMSG) = t.headers
+
+  def withHeaders(t: TMSG, headers: Fields.Headers) = {
+    t.copy(headers=headers)
+  }
+
+  def withBody(t: TMSG, body: Array[Byte]) = t.copy(payload=body)
 
 }
 
 
 case class RMSG(headers: Fields.Headers, payload: Array[Byte])
 
-object RMSG  {
+
+object RMSG extends MSG[RMSG]  {
 
   def apply(payload: Array[Byte]): RMSG  = {
-    RMSG( Headers.empty, payload)
+    RMSG(Headers.empty, payload )
   }
+
+  def empty(): RMSG ={
+    RMSG( Array[Byte]()  )
+  }
+
+  def body(t: RMSG) = t.payload
+  def headers(t: RMSG) = t.headers
+
+  def withHeaders(t: RMSG, headers: Fields.Headers) = {
+    t.copy(headers=headers)
+  }
+
+  def withBody(t: RMSG, body: Array[Byte]) = t.copy(payload=body)
 
 }
 

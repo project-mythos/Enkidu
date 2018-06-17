@@ -8,12 +8,17 @@ import io.netty.handler.codec.{
 
 import io.netty.channel.{ChannelHandlerContext, ChannelPipeline}
 import io.netty.buffer.{Unpooled, ByteBuf, ByteBufUtil}
+import Enkidu.VarInt
+
+
+
+
 
 
 class TMSGDecoder extends ByteToMessageDecoder {
 
   def decodeField(in: ByteBuf): Option[ByteBuf] = {
-    val length = in.readInt()
+    val length = VarInt.decodeInt(in)
     if (in.readableBytes() < length) return None
     Some { in.readSlice(length) }  
   }
@@ -27,7 +32,7 @@ class TMSGDecoder extends ByteToMessageDecoder {
 
     (pathF, hdro, plF) match {
       case ( Some(path), Some(headers),  Some(payload) ) =>
-        val msg = TMSG(path, headers, payload) 
+        val msg = TMSG(path, headers, payload)
         out.add(msg)
 
       case _ => buf.resetReaderIndex() 
@@ -41,21 +46,22 @@ class TMSGDecoder extends ByteToMessageDecoder {
 
 
 
+
 class TMSGEncoder extends MessageToByteEncoder[TMSG]  {
 
   def encode(ctx: ChannelHandlerContext, msg: TMSG, out: ByteBuf) = {
 
     val (plen, path) = Path.toByteBuf(msg.path)
-    out.writeInt(plen)
+    VarInt.encodeInt(plen, out)
     out.writeBytes(path)
 
 
     val (clen, ctxb) = Headers.toByteBuf(msg.headers)
-    out.writeInt(clen)
+    VarInt.encodeInt(clen, out)
     out.writeBytes(ctxb)
 
 
-    out.writeInt(msg.payload.length)
+    VarInt.encodeInt(msg.payload.length, out)
     out.writeBytes(msg.payload)
 
   }
@@ -64,11 +70,13 @@ class TMSGEncoder extends MessageToByteEncoder[TMSG]  {
 
 
 
+
+
 class RMSGDecoder extends ByteToMessageDecoder {
 
 
   def decodeField(in: ByteBuf): Option[ByteBuf] = {
-    val length = in.readInt()
+    val length = VarInt.decodeInt(in)
     if (in.readableBytes() < length) return None
     Some { in.readSlice(length) }
   }
@@ -96,15 +104,16 @@ class RMSGDecoder extends ByteToMessageDecoder {
 
 class RMSGEncoder extends MessageToByteEncoder[RMSG] {
 
+ 
 
 
   def encode(ctx: ChannelHandlerContext, msg: RMSG, out: ByteBuf) = {
     val (clen, ctxb) = Headers.toByteBuf(msg.headers)
-    out.writeInt(clen)
+    VarInt.encodeInt(clen, out)
     out.writeBytes(ctxb)
 
 
-    out.writeInt(msg.payload.length)
+    VarInt.encodeInt(msg.payload.length, out)
     out.writeBytes(msg.payload)
 
   }
@@ -124,5 +133,8 @@ object Pipelines {
     pipeline.addLast(new TMSGDecoder())
     pipeline.addLast(new RMSGEncoder())
   }
+
+
+
 
 }

@@ -1,0 +1,13 @@
+
+trait KeyRouting[Req] {
+  get_key(req: Req):  
+}
+
+KeyRoutingLoadBalancer(CM: ConnectionManager, RoutingLB) {
+} 
+
+
+LoadBalancer(CM: ConnectionManager, LB[Node]) = {
+}
+
+

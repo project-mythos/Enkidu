@@ -61,23 +61,29 @@ class Listener[In, Out](
   channelT: Class[_ <: ServerChannel]
 ) {
 
+  val bossLoop = new NioEventLoopGroup(
+    1,
+    new NamedPoolThreadFactory("finagle/netty4/boss", makeDaemons = true)
+  )
+
+  val b = new ServerBootstrap()
+
+  b
+    .group(bossLoop, pool.group)
+    .channel(channelT)
 
 
-  def listen[In, Out](addr: SocketAddress)(handler: Listener.Handler[In, Out]) = {
-    val bossLoop = new NioEventLoopGroup(
-          1,
-          new NamedPoolThreadFactory("finagle/netty4/boss", makeDaemons = true)
-        )
-
-    val b = new ServerBootstrap()
-
-    b
-      .group(bossLoop, pool.group)
-      .channel(channelT)
-      .childHandler( Listener.channelInit(initPipeline, handler) )
 
 
-    b.bind(addr).sync()
+  def listen[In, Out](addr: SocketAddress)(handler: Listener.Handler[In, Out]): Future[Unit]  = {
+    b.childHandler( Listener.channelInit(initPipeline, handler) )
+    FutureConversion.toFuture( b.bind(addr) ) {f => Future.Done }
   }
+
+
+  def close() = {
+    FutureConversion.toFuture( b.group().shutdownGracefully() )
+  }
+
 
 }

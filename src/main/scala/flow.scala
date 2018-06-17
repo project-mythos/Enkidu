@@ -15,6 +15,7 @@ import scala.util.control.{NonFatal, NoStackTrace}
 
 
 
+
 class ChannelClosedException(addr: SocketAddress) extends Throwable
 
 trait Flow[In, Out] {
@@ -25,6 +26,7 @@ trait Flow[In, Out] {
 
   def remoteAddress: SocketAddress
   def localAddress: SocketAddress
+  def closed(): Boolean
 }
 
 
@@ -74,10 +76,12 @@ class ChannelFlow(
   def close() = {
     val p = Promise[Unit]() 
     if (chan.isOpen) {
-      Future { chan.close() }
+      alreadyClosed.set(false)
+      FutureConversion.toFuture( chan.close() ){ x => p.become(Future.Done) }
     } else Future.Done 
   }
 
+  def closed() = alreadyClosed.get()
 
   def fail(exc: Throwable) = {
     readQueue.fail(exc, discard = false)
@@ -165,7 +169,7 @@ class ChannelFlow(
 class QueueFlow[In, Out](writeq: AsyncQueue[In] = new AsyncQueue[In], readq: AsyncQueue[Out] = new AsyncQueue[Out])
     extends Flow[In, Out] {
 
-  val closed = Promise[Boolean]() 
+  val alreadyClosed = new AtomicBoolean() 
 
   def write(input: In): Future[Unit] = {
     writeq.offer(input)
@@ -177,11 +181,13 @@ class QueueFlow[In, Out](writeq: AsyncQueue[In] = new AsyncQueue[In], readq: Asy
 
 
   def close(): Future[Unit] = {
-    closed.updateIfEmpty(Try{true} )
+    alreadyClosed.compareAndSet(false, true)
     Future.Done
   }
 
-
+  def closed(): Boolean = {
+    alreadyClosed.get()
+  }
   def localAddress: SocketAddress = new SocketAddress {}
   def remoteAddress: SocketAddress = new SocketAddress {}
 

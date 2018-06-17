@@ -1,36 +1,34 @@
 package Enkidu
 
+import com.twitter.util.Future
+import io.netty.bootstrap.Bootstrap
+import Enki.Pool
+import scala.collection.concurrent.TrieMap
+
+
 import io.netty.channel
 import com.twitter.util.{Future, Promise}
 import java.net.SocketAddress
 
 
 object Connection {
-  import channel.{ChannelInitializer, Channel, ChannelFutureListener, ChannelException}
+  import channel.{ChannelInitializer, Channel, ChannelFuture}
   import io.netty.bootstrap.Bootstrap
 
 
   def connect[Req, Rep](b: Bootstrap, addr: SocketAddress) = {
 
-    val p = new Promise[Flow[Req, Rep] ] 
-    val makeFlow = {ch: Channel => new ChannelFlow(ch) }
-    b.connect(addr).addListener( new ChannelFutureListener {
+    FutureConversion.toFuture( b.connect(addr) ) {
+      f: ChannelFuture => Flow.cast[Req, Rep](new ChannelFlow(f.channel) )
+    }
 
-      def operationComplete(f: channel.ChannelFuture) = {
-        if (f.isSuccess) {
+  }
 
-          val t = (makeFlow andThen Flow.cast[Req, Rep])(f.channel())
-          p.setValue(t)
 
-        } else {
-          p.setException( new ChannelException() )
-        }
-
-      }
-
-    })
-
-    p
+  def connect[Req, Rep](b: Bootstrap, addr: Node) = {
+    FutureConversion.toFuture( b.connect(addr.toSocketAddress) ) {
+      f: ChannelFuture => Flow.cast[Req, Rep](new ChannelFlow(f.channel) )
+    }
   }
 
 
@@ -68,6 +66,73 @@ object Connection {
     b
   }
 
+
+
+}
+
+
+
+
+
+
+trait ConnectionManager[In, Out] {
+  def connect[T](addr: Node)(fn: Flow[In, Out] => Future[T]): Future[T]
+}
+
+
+class SimpleCM[In, Out](BS: Bootstrap) extends ConnectionManager[In, Out] {
+
+  def connect[T](addr: Node)(fn: Flow[In, Out] => Future[T]): Future[T] = {
+    Connection.connect[In, Out](BS, addr.toSocketAddress) flatMap{flow =>
+      fn(flow) ensure { flow.close() }
+    }
+  }
+ 
+}
+
+
+
+class EndpointPool[In, Out](
+  BS: Bootstrap,
+  sizePerEndpoint: Int, 
+  endpoints: TrieMap[Node, Pool[Flow[In, Out] ] ]
+) extends ConnectionManager[In, Out] {
+
+
+
+  def create_conn(peer: Node)() = {
+    Connection.connect[In, Out](BS, peer)
+  }
+
+  def close_conn(flow: Flow[In, Out]) = flow.close()
+  def check(flow: Flow[In, Out]) = (flow.closed() != true)
+
+  def makePool(peer: Node) = {
+     Pool.make(sizePerEndpoint, create_conn(peer), check, close_conn)
+  }
+
+  def addEndpoint(endpoint: Node) = {
+    val pool = Pool.make(sizePerEndpoint, create_conn(endpoint), check, close_conn)
+    endpoints.putIfAbsent(endpoint, pool)
+  }
+
+
+  def removeEndpoint(endpoint: Node): Future[Unit] = {
+    endpoints.get(endpoint) match {
+      case Some(pool) => Pool.destroy(pool)
+      case _ => Future.Done
+    }
+  }
+
+
+
+  def connect[T](peer: Node)(f: Flow[In, Out] => Future[T]) = {
+
+    def make = makePool(peer)
+
+    val p = endpoints.getOrElseUpdate(peer, make)
+    Pool.use(p)(f)
+  }
 
 
 }
