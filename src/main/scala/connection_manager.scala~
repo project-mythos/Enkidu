@@ -1,8 +1,0 @@
-package Enkidu
-
-import com.twitter.util.Future
-
-trait ConnectionManager[In, Out] {
-  def connect[T](addr: Address)(fn: Flow[In, Out] => Future[T]): Future[T]
-}
-
