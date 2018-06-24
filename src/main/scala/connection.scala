@@ -2,14 +2,14 @@ package Enkidu
 
 import com.twitter.util.Future
 import io.netty.bootstrap.Bootstrap
-import Enki.Pool
 import scala.collection.concurrent.TrieMap
 
 
 import io.netty.channel
 import com.twitter.util.{Future, Promise}
 import java.net.SocketAddress
-
+import channel.ChannelOption
+import java.lang.{Boolean => JBool}
 
 object Connection {
   import channel.{ChannelInitializer, Channel, ChannelFuture}
@@ -94,45 +94,79 @@ class SimpleCM[In, Out](BS: Bootstrap) extends ConnectionManager[In, Out] {
 
 class EndpointPool[In, Out](
   BS: Bootstrap,
-  sizePerEndpoint: Int, 
-  endpoints: TrieMap[Node, Pool[Flow[In, Out] ] ]
+  endpoints: EndpointPool.PoolMap[In, Out], 
+  min: Int,
+  max: Int
 ) extends ConnectionManager[In, Out] {
 
 
 
-  def create_conn(peer: Node)() = {
-    Connection.connect[In, Out](BS, peer)
+  def makePool(node: Node) = {
+
+    val allocator = new Allocator[Flow[In, Out]] {
+      def close(f: Flow[In, Out] ) = f.close()
+      def create() = Connection.connect[In, Out](BS, node)
+      def check(flow: Flow[In, Out]) = flow.closed() 
+    }
+
+    new Pool(allocator, min, max)
   }
 
-  def close_conn(flow: Flow[In, Out]) = flow.close()
-  def check(flow: Flow[In, Out]) = (flow.closed() != true)
 
-  def makePool(peer: Node) = {
-     Pool.make(sizePerEndpoint, create_conn(peer), check, close_conn)
-  }
 
   def addEndpoint(endpoint: Node) = {
-    val pool = Pool.make(sizePerEndpoint, create_conn(endpoint), check, close_conn)
+    val pool = makePool(endpoint) 
     endpoints.putIfAbsent(endpoint, pool)
+    pool
   }
 
 
   def removeEndpoint(endpoint: Node): Future[Unit] = {
     endpoints.get(endpoint) match {
-      case Some(pool) => Pool.destroy(pool)
+      case Some(pool) => pool.close()
       case _ => Future.Done
     }
   }
 
 
 
+
   def connect[T](peer: Node)(f: Flow[In, Out] => Future[T]) = {
 
-    def make = makePool(peer)
 
-    val p = endpoints.getOrElseUpdate(peer, make)
-    Pool.use(p)(f)
+    val exists = endpoints.get(peer).isDefined
+
+    val p = {
+      if (exists) endpoints.get(peer).get
+      else addEndpoint(peer) 
+    }
+
+    p.use {flo => f(flo) }
+
   }
 
 
 }
+
+
+
+
+object EndpointPool {
+
+  type FlowPool[I, O] = Pool[ Flow[I, O] ]
+  type PoolMap[In, Out] = TrieMap[Node, FlowPool[In, Out] ]
+
+  def apply[In, Out](bs: Bootstrap): EndpointPool[In, Out] = {
+
+    bs.option[JBool](ChannelOption.SO_KEEPALIVE, true)
+    val TM = TrieMap[Node, FlowPool[In, Out] ]()
+
+    val max_size = 100
+    val min_size = 10
+
+    new EndpointPool(bs, TM, max_size, min_size)
+  }
+
+
+}
+ 

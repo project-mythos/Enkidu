@@ -3,7 +3,7 @@ package Enkidu.Loadbalancer
 import org.scalatest._
 import Enkidu.Node
 import com.twitter.util.{Future, RandomSocket, Await, Var}
-import Enki.CHash.Sharder
+
 
 object Util {
 
@@ -59,11 +59,19 @@ class DistributorSpec extends FunSuite {
 
 class ServerListSpec extends FunSuite {
   val hosts = List.fill(10)(Util.makeNode).toSet
-  val SL = new ServerList(hosts)
 
+
+  def makeSL() = {
+    val v = Var(hosts)
+    val SL =  new ServerList(v)
+    SL.update(hosts)
+    SL
+  }
 
 
   test("contains all hosts") {
+    val SL = makeSL()
+
     SL.update(hosts)
     val se = SL.endpoints.map {x => x.toNode}.toSet
     assert(hosts == se)
@@ -72,16 +80,16 @@ class ServerListSpec extends FunSuite {
 
 
   test("keeps load info on update") {
-    
+    val SL = makeSL()
 
     SL.endpoints.head.incr()
     SL.update(hosts)
 
-    synchronized { assert(SL.endpoints.head.load() == 1) }
+    assert(SL.endpoints.head.load() == 1)
   }
 
-  test ("discard dead hosts") {
-    
+  test ("discard dead hosts and keep load info on hosts it retains") {
+    val SL = makeSL()
     val nl = hosts.toList.take(5).toSet
     SL.endpoints.head.incr()
 
@@ -90,35 +98,9 @@ class ServerListSpec extends FunSuite {
 
     val cond = SL.endpoints.exists(x => x.toNode == hosts.toList(6) ) != true
     assert(cond)
+
+    assert(SL.endpoints.head.load() == 1)
   }
-
-
-}
-
-
-
-
-class CHashSuite extends FunSuite {
-  val nodes = Vector.fill(10)(Util.makeNode).sortWith(_.id < _.id)
-  val loaded = nodes.map {x => LoadedNode(x)}
-
-  val CHDist = new CHashLeastLoaded(3)
-  
-
-  test("LB is consistent with shards") {
-
-    val key = Array.fill(20)((scala.util.Random.nextInt(256) - 128).toByte)
-
-    val hash = Enki.KeyHasher.FNV1A_64.hashKey(key)
-
-    val shards = Sharder.lookup(loaded, hash, 3)
-
-    val node = CHDist.pick(key, loaded)
-    assert(shards.contains(node) )
-  }
-
-
-
 
 
 }

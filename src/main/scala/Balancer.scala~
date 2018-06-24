@@ -8,21 +8,17 @@ import Enki.KeyHasher.{FNV1A_64, MURMUR3}
 import Enki.CHash
 import scala.util.Random
 
-
 case class LoadedNode(node: Node) {
 
-  private val counter = new AtomicLong(0L)
+  private val serverLoad = new AtomicLong(0L)
 
-  def load() = counter.get
-  def incr() = counter.incrementAndGet()
-  def decr() = counter.decrementAndGet()
+  def load(): Long = serverLoad.get()
+  def incr() = serverLoad.incrementAndGet()
+  def decr() = serverLoad.decrementAndGet()
 
-  def toNode: Node = node
-  def id() = node.id
+  def toNode: Node = node 
 
 }
-
-
 
 
 trait Distributor {
@@ -60,7 +56,9 @@ object P2C extends Distributor {
   def pick(nodes: Vector[LoadedNode]) = {
 
     val a = Random.nextInt(nodes.size) 
-    val b = Random.nextInt(nodes.size) 
+    var b = Random.nextInt(nodes.size - 1) 
+
+    if (b >= a) {b = b + 1}
 
     val (c1, c2) = (nodes(a), nodes(b) )
     if (c1.load <= c2.load) c1
@@ -107,9 +105,8 @@ class CHashLeastLoaded(factor: Int) extends KeyDistributor {
 
 
 
-class ServerList(base: Set[Node]) {
-  private var servers =
-    base.map {x => LoadedNode(x)}.toVector.sortWith(_.node.id < _.node.id)
+class ServerList(Dest: Var[Set[Node]]) {
+  private var servers = Vector[LoadedNode]()
 
   val membershipWitness = new Witness[Set[Node]] {
     def notify(nodes: Set[Node]) = { update(nodes) }
@@ -137,26 +134,6 @@ class ServerList(base: Set[Node]) {
     //servers = v3
   }
 
-
-
-  def withSource(v: Var[Set[Node]] ) = {
-    v.changes.register(update) 
-  }
-
-  def get(node: Node) = {
-    val fo = servers.find(n => n.node == node)
-    fo match {
-
-      case Some(lnode) => lnode
-
-      case None =>
-
-        val ln = LoadedNode(node)
-        synchronized {servers = servers :+ ln}
-        ln
-    }
-  }
-
 }
 
 
@@ -164,14 +141,6 @@ class ServerList(base: Set[Node]) {
 
 object ServerList {
   type Endpoints = Var[Node] with Updatable[Node]
-
-
-  def apply(): ServerList =  {
-    val empty = Set[Node]()
-    new ServerList(empty)
-  }
-
-
 }
 
 
@@ -203,7 +172,7 @@ class KeyBasedLB[In, Out](
 ) {
 
 
-  def use[T](key: Array[Byte])(f: Flow[In, Out] => Future[T]) = {
+  def use[T](key: Array[Byte], f: Flow[In, Out] => Future[T]) = {
 
     KD.use(key, SL.endpoints) { ln =>
       CM.connect(ln.toNode)(f)

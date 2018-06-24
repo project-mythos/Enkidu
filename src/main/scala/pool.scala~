@@ -1,0 +1,115 @@
+package Enkidu
+import com.twitter.util.{Future, Promise, Await}
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import scala.collection.JavaConverters._
+
+class Pool[In, Out](
+  create: () => Future[ Flow[In, Out] ],
+  min: Int,
+  max: Int
+) {
+
+  val conns = new ArrayBlockingQueue[Flo](max)
+  val created = new AtomicInteger(0)
+  val closed = new AtomicBoolean(false)
+
+
+ 
+  def can_create() = {created.get() < max}
+
+  Future.collect { (1 to min) map { x => add() } }
+
+
+  def release(f: Flow[In, Out]) = {
+    conns.put(f)
+  }
+
+  def check(f: Flow[In, Out]) = {
+    f.closed() == false 
+  }
+
+  type Flo = Flow[In, Out]
+
+
+  def acquire(): Future[Flo] = {
+
+    if (conns.size == 0 && can_create) {
+      add()
+    } else {
+      Future { conns.take()  } 
+    }
+
+  }
+
+
+
+  def add(): Future[Flo] = {
+    val p = Promise[Flo]()
+    val res = create()
+
+    res onSuccess {x =>
+      created.incrementAndGet
+      p.setValue(x)
+    }
+
+    res onFailure {x => p.become(res) }
+  }
+
+  def remove(flow: Flo) = {
+    created.decrementAndGet
+    flow.close()
+  }
+
+
+  def use[T](fn: Flo => Future[T]) = {
+
+
+    val result = Promise[T]()
+
+    acquire() flatMap { flow =>
+
+
+      val usage = fn(flow)
+
+
+      usage onSuccess { x =>
+        release(flow)
+        result.become(usage)
+      }
+
+
+      usage onFailure {e =>
+
+        if ( check(flow) ) {
+          release(flow)
+          result.become(usage)
+        }
+
+
+        else {
+          remove(flow)
+          result.become(usage)
+        }
+
+      }
+
+    }
+
+
+    result
+  }
+
+
+
+  def close() = {
+    val e = new java.util.ArrayList[Flo]() 
+    conns.drainTo(e)
+
+    e.asScala.foreach {c => c.close()}
+    Future.Done
+  }
+
+
+}
+

@@ -74,9 +74,10 @@ class ChannelFlow(
 
 
   def close() = {
-    val p = Promise[Unit]() 
+    val p = Promise[Unit]()
+    alreadyClosed.set(true)
+
     if (chan.isOpen) {
-      alreadyClosed.set(false)
       FutureConversion.toFuture( chan.close() ){ x => p.become(Future.Done) }
     } else Future.Done 
   }

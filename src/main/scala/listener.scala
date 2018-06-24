@@ -69,6 +69,7 @@ class Listener[In, Out](
   val b = new ServerBootstrap()
 
   b
+
     .group(bossLoop, pool.group)
     .channel(channelT)
 

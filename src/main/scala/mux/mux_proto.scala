@@ -47,6 +47,17 @@ object TMSG extends MSG[TMSG] {
 
   def withBody(t: TMSG, body: Array[Byte]) = t.copy(payload=body)
 
+
+  def withBody(t: TMSG, body: String) = {
+    t.copy(payload=body.getBytes("utf8") )
+  }
+
+
+  def apply(path: Fields.Path, payload: String): TMSG = {
+    val data = payload.getBytes("utf8")
+    TMSG(path, Headers.empty, data)
+  }
+
 }
 
 
@@ -71,6 +82,16 @@ object RMSG extends MSG[RMSG]  {
   }
 
   def withBody(t: RMSG, body: Array[Byte]) = t.copy(payload=body)
+
+  def withBody(t: RMSG, body: String) = {
+    t.copy(payload=body.getBytes("utf8") )
+  }
+
+  def apply(payload: String): RMSG = {
+    val data = payload.getBytes("utf8")
+    RMSG(Headers.empty, data)
+  }
+
 
 }
 
