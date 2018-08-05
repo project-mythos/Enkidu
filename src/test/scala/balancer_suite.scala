@@ -102,16 +102,16 @@ class CHashSuite extends FunSuite {
   val nodes = Vector.fill(10)(Util.makeNode).sortWith(_.id < _.id)
   val loaded = nodes.map {x => LoadedNode(x)}
 
-  val CHDist = new CHashLeastLoaded(3)
+  val CHDist = new CHashLeastLoaded(3,  Enki.KeyHasher.FNV1A_64)
   
 
   test("LB is consistent with shards") {
 
     val key = Array.fill(20)((scala.util.Random.nextInt(256) - 128).toByte)
 
-    val hash = Enki.KeyHasher.FNV1A_64.hashKey(key)
 
-    val shards = Sharder.lookup(loaded, hash, 3)
+
+    val shards = CHDist.shard(key, loaded)
 
     val node = CHDist.pick(key, loaded)
     assert(shards.contains(node) )

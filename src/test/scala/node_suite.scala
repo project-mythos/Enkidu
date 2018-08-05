@@ -9,4 +9,7 @@ class NodeCodecSuite extends FunSuite {
     val got = Node.fromString( node.toString )
     assert(node == got)
   }
+
+
+  
 }

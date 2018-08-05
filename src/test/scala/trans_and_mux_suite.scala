@@ -40,7 +40,6 @@ class CodecSuite extends FunSuite {
 
     EmbeddedUtil.write(tchan, tmsg)
     val got = EmbeddedUtil.read[TMSG](tchan)
-    println(got)
 
     assert(got != null)
     val (e, gotm) = (new String(tmsg.payload, "UTF-8") , new String(got.payload, "UTF-8") )
