@@ -38,6 +38,10 @@ object TMSG extends MSG[TMSG] {
     TMSG(path, Headers.empty, Array[Byte]() )
   }
 
+  def apply(path: String): TMSG = {
+    TMSG( Path.ofString(path) )
+  }
+
   def body(t: TMSG) = t.payload
   def headers(t: TMSG) = t.headers
 
