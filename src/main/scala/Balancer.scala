@@ -4,7 +4,8 @@ import Enkidu.{Node, ConnectionManager, Flow}
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import com.twitter.util.{Var, Updatable, Future, Witness}
-import Enki.KeyHasher.{FNV1A_64, MURMUR3}
+import Enki.KeyHasher
+import KeyHasher.{FNV1A_64, MURMUR3}
 import Enki.CHash
 import scala.util.Random
 
@@ -90,9 +91,9 @@ object P2CPKG extends KeyDistributor {
 }
 
 
-class CHashLeastLoaded(factor: Int) extends KeyDistributor {
+class CHashLeastLoaded(factor: Int, hasher: KeyHasher) extends KeyDistributor {
 
-  val hasher = FNV1A_64
+
   val S = CHash.Sharder
 
   def pick(key: Array[Byte], nodes: Vector[LoadedNode]) = {
@@ -100,6 +101,12 @@ class CHashLeastLoaded(factor: Int) extends KeyDistributor {
     val shards = S.lookup(nodes, key1, factor)
     shards.minBy(x => x.load)
   }
+
+  def shard(key: Array[Byte], nodes: Vector[LoadedNode]) = {
+    val key1 = hasher.hashKey(key)
+    S.lookup(nodes, key1, factor)
+  }
+
 
 }
 
